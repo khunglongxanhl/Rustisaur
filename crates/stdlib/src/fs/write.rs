@@ -2,8 +2,6 @@
 
 use std::path::Path;
 
-
-
 /// Write string contents to a file.
 pub async fn write_file(path: &Path, contents: &str) -> std::io::Result<()> {
     tokio::fs::write(path, contents).await

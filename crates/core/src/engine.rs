@@ -9,7 +9,7 @@ use rustisaur_lua_bridge::LuaStateManager;
 use rustisaur_stdlib::register_all;
 
 use crate::config::EngineConfig;
-use crate::error::{EngineError, RexError, Result};
+use crate::error::{EngineError, Result, RexError};
 use crate::runtime::RexRuntime;
 
 /// Main Rustisaur engine managing Lua state, runtime, and resources.
@@ -31,7 +31,8 @@ impl RustisaurEngine {
             .with_target(false)
             .try_init();
 
-        let runtime = RexRuntime::new().map_err(|e| RexError::Engine(EngineError::RuntimeInit(e.to_string())))?;
+        let runtime = RexRuntime::new()
+            .map_err(|e| RexError::Engine(EngineError::RuntimeInit(e.to_string())))?;
         let mut lua_manager = LuaStateManager::new()?;
 
         if config.enable_async {
@@ -39,8 +40,8 @@ impl RustisaurEngine {
         }
 
         if config.sandbox_mode {
-            let sandbox = rustisaur_lua_bridge::Sandbox::new()
-                .with_memory_limit(config.max_memory_mb);
+            let sandbox =
+                rustisaur_lua_bridge::Sandbox::new().with_memory_limit(config.max_memory_mb);
             lua_manager.configure_sandbox(sandbox);
             lua_manager.sandbox()?;
         }
@@ -69,7 +70,9 @@ impl RustisaurEngine {
     pub fn execute_file(&self, path: &Path) -> Result<Value<'_>> {
         self.ensure_active()?;
         if !path.exists() {
-            return Err(RexError::Engine(EngineError::FileNotFound(path.display().to_string())));
+            return Err(RexError::Engine(EngineError::FileNotFound(
+                path.display().to_string(),
+            )));
         }
         let results = self.lua_manager.execute_file(path)?;
         Ok(results.into_iter().next().unwrap_or(Value::Nil))
@@ -79,11 +82,16 @@ impl RustisaurEngine {
     pub async fn execute_file_async(&self, path: &Path) -> Result<Value<'_>> {
         self.ensure_active()?;
         if !path.exists() {
-            return Err(RexError::Engine(EngineError::FileNotFound(path.display().to_string())));
+            return Err(RexError::Engine(EngineError::FileNotFound(
+                path.display().to_string(),
+            )));
         }
         let path = path.to_path_buf();
         let code = tokio::fs::read_to_string(&path).await.map_err(|e| {
-            RexError::Engine(EngineError::ExecutionFailed(format!("Failed to read {}: {e}", path.display())))
+            RexError::Engine(EngineError::ExecutionFailed(format!(
+                "Failed to read {}: {e}",
+                path.display()
+            )))
         })?;
         self.execute_script(&code)
     }

@@ -59,7 +59,6 @@ pub async fn read_file(path: &Path) -> std::io::Result<String> {
 
 /// Append contents to a file.
 pub async fn append_file(path: &Path, contents: &str) -> std::io::Result<()> {
-    
     let mut file = tokio::fs::OpenOptions::new()
         .create(true)
         .append(true)

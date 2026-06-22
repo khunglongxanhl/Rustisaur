@@ -8,5 +8,5 @@ pub mod version;
 
 pub use config::EngineConfig;
 pub use engine::RustisaurEngine;
-pub use error::{EngineError, RexError, Result};
+pub use error::{EngineError, Result, RexError};
 pub use version::{VERSION, VERSION_INFO};

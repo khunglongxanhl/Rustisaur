@@ -12,5 +12,7 @@ async fn main() {
         rex.print("Body length: " .. #response.body)
     "#;
 
-    engine.execute_script(script).expect("Failed to execute script");
+    engine
+        .execute_script(script)
+        .expect("Failed to execute script");
 }

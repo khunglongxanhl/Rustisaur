@@ -12,7 +12,6 @@ pub fn parse(toml_str: &str) -> Result<serde_json::Value> {
 
 /// Serialize to TOML string.
 pub fn stringify(value: &serde_json::Value) -> Result<String> {
-    let toml_val: toml::Value =
-        serde_json::from_value(value.clone()).map_err(StdlibError::from)?;
+    let toml_val: toml::Value = serde_json::from_value(value.clone()).map_err(StdlibError::from)?;
     toml::to_string(&toml_val).map_err(|e| StdlibError::Toml(e.to_string()))
 }

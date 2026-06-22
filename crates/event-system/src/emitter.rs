@@ -73,10 +73,7 @@ mod tests {
         let mut emitter = EventEmitter::new();
         let mut rx = emitter.on("test");
 
-        emitter
-            .emit("test", json!({"msg": "hello"}))
-            .await
-            .unwrap();
+        emitter.emit("test", json!({"msg": "hello"})).await.unwrap();
 
         let data = rx.recv().await.unwrap();
         assert_eq!(data.name, "test");

@@ -57,7 +57,8 @@ impl LuaStateManager {
         let globals = self.state.globals();
         globals.set(
             "rex_version",
-            self.state.create_function(|_, ()| Ok(env!("CARGO_PKG_VERSION")))?,
+            self.state
+                .create_function(|_, ()| Ok(env!("CARGO_PKG_VERSION")))?,
         )?;
         Ok(())
     }
@@ -86,7 +87,9 @@ impl LuaStateManager {
     where
         F: for<'lua> Fn(&'lua Lua, Value<'lua>) -> mlua::Result<Value<'lua>> + Send + 'static,
     {
-        let lua_func = self.state.create_function(move |lua, arg: Value| func(lua, arg))?;
+        let lua_func = self
+            .state
+            .create_function(move |lua, arg: Value| func(lua, arg))?;
         self.state.globals().set(name, lua_func)?;
         Ok(())
     }

@@ -15,9 +15,7 @@ fn bench_script_execution() {
     let start = std::time::Instant::now();
 
     for i in 0..iterations {
-        engine
-            .execute_script(&format!("return {i} + 1"))
-            .unwrap();
+        engine.execute_script(&format!("return {i} + 1")).unwrap();
     }
 
     let elapsed = start.elapsed();

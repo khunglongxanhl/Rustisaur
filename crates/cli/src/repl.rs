@@ -41,8 +41,8 @@ impl RexREPL {
                         self.print_help();
                     } else if trimmed == ".clear" {
                         print!("\x1B[2J\x1B[1;1H");
-                    } else if trimmed.starts_with(".load ") {
-                        let file = trimmed[6..].trim();
+                    } else if let Some(stripped) = trimmed.strip_prefix(".load ") {
+                        let file = stripped.trim();
                         match self.engine.execute_file(file.as_ref()) {
                             Ok(result) => self.print_result(result),
                             Err(e) => eprintln!("Error: {e}"),

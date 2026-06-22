@@ -14,8 +14,7 @@ pub struct RexRuntime {
 impl RexRuntime {
     /// Create and start a new multi-threaded Tokio runtime.
     pub fn new() -> Result<Self, EngineError> {
-        let runtime = Runtime::new()
-            .map_err(|e| EngineError::RuntimeInit(e.to_string()))?;
+        let runtime = Runtime::new().map_err(|e| EngineError::RuntimeInit(e.to_string()))?;
         Ok(Self {
             runtime: Arc::new(runtime),
         })
