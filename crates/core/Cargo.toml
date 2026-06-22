@@ -1,0 +1,47 @@
+[package]
+name = "rustisaur-core"
+description = "Rustisaur core engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+
+[dependencies]
+rustisaur-lua-bridge = { workspace = true }
+rustisaur-stdlib = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+thiserror = { workspace = true }
+mlua = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3.10"
+
+[[example]]
+name = "basic_hello"
+path = "../../examples/basic_hello.rs"
+
+[[example]]
+name = "file_io"
+path = "../../examples/file_io.rs"
+
+[[example]]
+name = "http_client"
+path = "../../examples/http_client.rs"
+
+[[example]]
+name = "custom_functions"
+path = "../../examples/custom_functions.rs"
+
+[[example]]
+name = "async_await"
+path = "../../examples/async_await.rs"
+
+[[example]]
+name = "event_system"
+path = "../../examples/event_system.rs"

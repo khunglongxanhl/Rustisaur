@@ -1,0 +1,13 @@
+[package]
+name = "rustisaur-benchmarks"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[[bin]]
+name = "rustisaur-bench"
+path = "src/main.rs"
+
+[dependencies]
+rustisaur-core = { workspace = true }
+tokio = { workspace = true }

@@ -1,0 +1,51 @@
+[workspace]
+members = [
+    "crates/core",
+    "crates/lua-bridge",
+    "crates/stdlib",
+    "crates/event-system",
+    "crates/plugin-system",
+    "crates/cli",
+    "crates/ffi-layer",
+    "benchmarks",
+    "tests",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["Rustisaur Contributors <hello@rustisaur.dev>"]
+repository = "https://github.com/rustisaur/rustisaur"
+homepage = "https://rustisaur.dev"
+documentation = "https://docs.rs/rustisaur"
+
+[workspace.dependencies]
+tokio = { version = "1.35", features = ["full"] }
+mlua = { version = "0.9", features = ["lua54", "vendored", "async", "send"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+toml = "0.8"
+thiserror = "1.0"
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+clap = { version = "4.4", features = ["derive"] }
+reqwest = { version = "0.11", features = ["json"] }
+tokio-tungstenite = "0.21"
+futures-util = "0.3"
+rustyline = "13.0"
+notify = "6.1"
+libloading = "0.8"
+chrono = { version = "0.4", features = ["serde"] }
+rand = "0.8"
+
+# Internal crates
+rustisaur-core = { path = "crates/core" }
+rustisaur-lua-bridge = { path = "crates/lua-bridge" }
+rustisaur-stdlib = { path = "crates/stdlib" }
+rustisaur-event-system = { path = "crates/event-system" }
+rustisaur-plugin-system = { path = "crates/plugin-system" }
+rustisaur-ffi-layer = { path = "crates/ffi-layer" }

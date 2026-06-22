@@ -1,0 +1,16 @@
+[package]
+name = "rustisaur-plugin-system"
+description = "Plugin architecture for Rustisaur"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+rustisaur-core = { workspace = true }
+libloading = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

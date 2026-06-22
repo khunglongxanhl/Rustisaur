@@ -1,0 +1,15 @@
+[package]
+name = "rustisaur-ffi-layer"
+description = "C FFI layer for Rustisaur"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+rustisaur-core = { workspace = true }
+thiserror = { workspace = true }
+
+[lib]
+crate-type = ["cdylib", "rlib"]

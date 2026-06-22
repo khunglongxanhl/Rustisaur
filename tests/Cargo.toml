@@ -1,0 +1,13 @@
+[package]
+name = "rustisaur-tests"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[test]]
+name = "integration"
+path = "integration_tests.rs"
+
+[dev-dependencies]
+rustisaur-core = { path = "../crates/core" }
+mlua = { version = "0.9", features = ["lua54", "vendored", "async", "send"] }
