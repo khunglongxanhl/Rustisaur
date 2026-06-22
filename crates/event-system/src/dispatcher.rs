@@ -5,7 +5,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use crate::emitter::EventEmitter;
-use crate::types::{EventData, EventError, Result};
+use crate::types::{EventData, Result};
 
 /// Routes events between multiple emitters.
 pub struct EventDispatcher {
