@@ -38,14 +38,14 @@ impl LuaStateManager {
     }
 
     /// Execute Lua code and return all returned values.
-    pub fn execute(&self, code: &str) -> Result<Vec<Value>> {
+    pub fn execute(&self, code: &str) -> Result<Vec<Value<'_>>> {
         let chunk = self.state.load(code);
         let results: MultiValue = chunk.eval()?;
         Ok(results.into_vec())
     }
 
     /// Execute a Lua file.
-    pub fn execute_file(&self, path: &std::path::Path) -> Result<Vec<Value>> {
+    pub fn execute_file(&self, path: &std::path::Path) -> Result<Vec<Value<'_>>> {
         let code = std::fs::read_to_string(path).map_err(|e| {
             LuaBridgeError::Conversion(format!("Failed to read {}: {e}", path.display()))
         })?;

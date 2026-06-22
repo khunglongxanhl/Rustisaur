@@ -29,7 +29,7 @@ impl<'lua> IntoLua<'lua> for RexValue<'lua> {
 }
 
 impl<'lua> FromLua<'lua> for RexValue<'lua> {
-    fn from_lua(value: LuaValue<'lua>, lua: &'lua Lua) -> mlua::Result<Self> {
+    fn from_lua(value: LuaValue<'lua>, _lua: &'lua Lua) -> mlua::Result<Self> {
         match value {
             LuaValue::String(s) => Ok(RexValue::String(s.to_str()?.to_string())),
             LuaValue::Integer(i) => Ok(RexValue::Number(i as f64)),

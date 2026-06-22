@@ -70,7 +70,7 @@ impl Sandbox {
             }
         }
 
-        let memory_bytes = (self.max_memory_mb * 1024 * 1024) as usize;
+        let memory_bytes = self.max_memory_mb * 1024 * 1024;
         lua.set_memory_limit(memory_bytes)?;
 
         if self.max_instructions > 0 {
