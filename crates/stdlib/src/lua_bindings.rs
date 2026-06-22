@@ -1,6 +1,6 @@
 //! Lua bindings for the standard library.
 
-use mlua::{Lua, Result as LuaResult, Table, Value};
+use mlua::{Lua, Result as LuaResult, Table, Value, Variadic};
 use serde_json;
 
 use crate::error::StdlibError;
@@ -64,6 +64,49 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
     
     rex.set("table", table)?;
     
+    // Register rex.fs module
+    let fs = lua.create_table()?;
+    
+    fs.set("write", lua.create_function(|_, (path, content): (String, String)| {
+        std::fs::write(&path, content).map_err(|e| {
+            mlua::Error::RuntimeError(format!("File write error: {}", e))
+        })
+    })?)?;
+    
+    fs.set("read", lua.create_function(|_, path: String| {
+        std::fs::read_to_string(&path).map_err(|e| {
+            mlua::Error::RuntimeError(format!("File read error: {}", e))
+        })
+    })?)?;
+    
+    rex.set("fs", fs)?;
+    
+    // Register rex.string module
+    let string = lua.create_table()?;
+    
+    string.set("upper", lua.create_function(|_, s: String| {
+        Ok(s.to_uppercase())
+    })?)?;
+    
+    string.set("lower", lua.create_function(|_, s: String| {
+        Ok(s.to_lowercase())
+    })?)?;
+    
+    rex.set("string", string)?;
+    
+    // Register rex.math module
+    let math = lua.create_table()?;
+    
+    math.set("max", lua.create_function(|_, nums: Variadic<i64>| {
+        Ok(nums.iter().max().copied().unwrap_or(0))
+    })?)?;
+    
+    math.set("min", lua.create_function(|_, nums: Variadic<i64>| {
+        Ok(nums.iter().min().copied().unwrap_or(0))
+    })?)?;
+    
+    rex.set("math", math)?;
+    
     // Set rex as global
     lua.globals().set("rex", rex)?;
     
@@ -104,6 +147,20 @@ fn json_value_to_lua<'lua>(lua: &'lua Lua, value: &serde_json::Value) -> LuaResu
 
 /// Convert Lua Value to serde_json::Value.
 fn lua_value_to_json(value: Value) -> Result<serde_json::Value, mlua::Error> {
+    lua_value_to_json_with_depth(value, 0, 100)
+}
+
+fn lua_value_to_json_with_depth(
+    value: Value,
+    depth: usize,
+    max_depth: usize,
+) -> Result<serde_json::Value, mlua::Error> {
+    if depth > max_depth {
+        return Err(mlua::Error::RuntimeError(
+            "Maximum nesting depth exceeded".to_string(),
+        ));
+    }
+
     match value {
         Value::Nil => Ok(serde_json::Value::Null),
         Value::Boolean(b) => Ok(serde_json::Value::Bool(b)),
@@ -113,30 +170,44 @@ fn lua_value_to_json(value: Value) -> Result<serde_json::Value, mlua::Error> {
         )),
         Value::String(s) => Ok(serde_json::Value::String(s.to_str()?.to_string())),
         Value::Table(t) => {
-            // Try to convert as array first
-            let mut arr = Vec::new();
-            let mut i = 1;
-            loop {
-                match t.get::<_, Value>(i) {
-                    Ok(val) => {
-                        arr.push(lua_value_to_json(val)?);
-                        i += 1;
+            // First, check if it's a pure array (sequential integer keys starting from 1)
+            let len = t.len().unwrap_or(0);
+            if len > 0 {
+                let mut arr = Vec::with_capacity(len as usize);
+                let mut is_pure_array = true;
+                
+                for i in 1..=len {
+                    match t.get::<_, Value>(i) {
+                        Ok(val) => {
+                            arr.push(lua_value_to_json_with_depth(val, depth + 1, max_depth)?);
+                        }
+                        Err(_) => {
+                            is_pure_array = false;
+                            break;
+                        }
                     }
-                    Err(_) => break,
+                }
+                
+                if is_pure_array {
+                    return Ok(serde_json::Value::Array(arr));
                 }
             }
             
-            if !arr.is_empty() {
-                Ok(serde_json::Value::Array(arr))
-            } else {
-                // Convert as object
-                let mut obj = serde_json::Map::new();
-                for pair in t.clone().pairs::<String, Value>() {
-                    let (key, val) = pair?;
-                    obj.insert(key, lua_value_to_json(val)?);
-                }
-                Ok(serde_json::Value::Object(obj))
+            // Convert as object
+            let mut obj = serde_json::Map::new();
+            for pair in t.clone().pairs::<Value, Value>() {
+                let (key, val) = pair?;
+                let key_str = match key {
+                    Value::String(s) => s.to_str()?.to_string(),
+                    Value::Integer(i) => i.to_string(),
+                    _ => continue,
+                };
+                obj.insert(
+                    key_str,
+                    lua_value_to_json_with_depth(val, depth + 1, max_depth)?,
+                );
             }
+            Ok(serde_json::Value::Object(obj))
         }
         _ => Err(mlua::Error::RuntimeError("Unsupported Lua type".to_string())),
     }
