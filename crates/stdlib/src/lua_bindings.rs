@@ -53,11 +53,9 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
     
     table.set("keys", lua.create_function(|lua, t: Table| {
         let keys = lua.create_table()?;
-        let mut i = 1;
-        for pair in t.clone().pairs::<Value, Value>() {
+        for (i, pair) in t.clone().pairs::<Value, Value>().enumerate() {
             let (key, _) = pair?;
-            keys.set(i, key)?;
-            i += 1;
+            keys.set(i + 1, key)?;
         }
         Ok(keys)
     })?)?;
