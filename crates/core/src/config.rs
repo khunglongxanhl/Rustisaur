@@ -32,13 +32,13 @@ pub struct SandboxConfig {
     pub allowed_read_dirs: Vec<PathBuf>,
     /// Allowed write directories (empty = allow all if allow_write is true)
     pub allowed_write_dirs: Vec<PathBuf>,
-    
+
     // Network restrictions
     /// Allow network operations
     pub allow_network: bool,
     /// Allowed network hosts (empty = allow all if allow_network is true)
     pub allowed_hosts: Vec<String>,
-    
+
     // System restrictions
     /// Allow process execution
     pub allow_process: bool,
@@ -46,7 +46,7 @@ pub struct SandboxConfig {
     pub allow_env: bool,
     /// Allow file system watch
     pub allow_fs_watch: bool,
-    
+
     // Resource limits
     /// Maximum number of iterations in loops (prevents infinite loops)
     pub max_loop_iterations: usize,
@@ -76,7 +76,7 @@ impl EngineConfig {
             ..Default::default()
         }
     }
-    
+
     /// Create a development configuration with relaxed security.
     pub fn development() -> Self {
         Self {
@@ -123,7 +123,7 @@ impl SandboxConfig {
             max_loop_iterations: 10_000,
         }
     }
-    
+
     /// Create a permissive sandbox configuration (development mode).
     pub fn permissive() -> Self {
         Self {
@@ -139,43 +139,47 @@ impl SandboxConfig {
             max_loop_iterations: 10_000_000,
         }
     }
-    
+
     /// Check if a file path is allowed for reading.
     pub fn is_read_allowed(&self, path: &std::path::Path) -> bool {
         if !self.allow_read {
             return false;
         }
-        
+
         if self.allowed_read_dirs.is_empty() {
             return true; // Allow all if no restrictions
         }
-        
-        self.allowed_read_dirs.iter().any(|dir| path.starts_with(dir))
+
+        self.allowed_read_dirs
+            .iter()
+            .any(|dir| path.starts_with(dir))
     }
-    
+
     /// Check if a file path is allowed for writing.
     pub fn is_write_allowed(&self, path: &std::path::Path) -> bool {
         if !self.allow_write {
             return false;
         }
-        
+
         if self.allowed_write_dirs.is_empty() {
             return true; // Allow all if no restrictions
         }
-        
-        self.allowed_write_dirs.iter().any(|dir| path.starts_with(dir))
+
+        self.allowed_write_dirs
+            .iter()
+            .any(|dir| path.starts_with(dir))
     }
-    
+
     /// Check if a network host is allowed.
     pub fn is_host_allowed(&self, host: &str) -> bool {
         if !self.allow_network {
             return false;
         }
-        
+
         if self.allowed_hosts.is_empty() {
             return true; // Allow all if no restrictions
         }
-        
+
         self.allowed_hosts.iter().any(|h| host.contains(h))
     }
 }

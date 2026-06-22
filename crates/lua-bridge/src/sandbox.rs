@@ -14,34 +14,34 @@ use crate::error::Result;
 pub enum SecurityViolation {
     #[error("File read not allowed: {0}")]
     FileReadNotAllowed(String),
-    
+
     #[error("File write not allowed: {0}")]
     FileWriteNotAllowed(String),
-    
+
     #[error("Network access not allowed: {0}")]
     NetworkAccessNotAllowed(String),
-    
+
     #[error("Process execution not allowed")]
     ProcessExecutionNotAllowed,
-    
+
     #[error("Environment variable access not allowed")]
     EnvAccessNotAllowed,
-    
+
     #[error("Execution time limit exceeded: {0}ms")]
     TimeLimitExceeded(u64),
-    
+
     #[error("Memory limit exceeded: {0}MB")]
     MemoryLimitExceeded(usize),
-    
+
     #[error("Instruction limit exceeded")]
     InstructionLimitExceeded,
-    
+
     #[error("Loop iteration limit exceeded")]
     LoopIterationLimitExceeded,
-    
+
     #[error("Dangerous pattern detected: {0}")]
     DangerousPatternDetected(String),
-    
+
     #[error("Module not allowed: {0}")]
     ModuleNotAllowed(String),
 }
@@ -54,16 +54,16 @@ pub struct SandboxConfig {
     pub allow_write: bool,
     pub allowed_read_dirs: Vec<std::path::PathBuf>,
     pub allowed_write_dirs: Vec<std::path::PathBuf>,
-    
+
     // Network restrictions
     pub allow_network: bool,
     pub allowed_hosts: Vec<String>,
-    
+
     // System restrictions
     pub allow_process: bool,
     pub allow_env: bool,
     pub allow_fs_watch: bool,
-    
+
     // Resource limits
     pub max_loop_iterations: usize,
 }
@@ -101,7 +101,7 @@ impl SandboxConfig {
             max_loop_iterations: 10_000,
         }
     }
-    
+
     /// Create a permissive sandbox configuration (development mode).
     pub fn permissive() -> Self {
         Self {
@@ -117,43 +117,47 @@ impl SandboxConfig {
             max_loop_iterations: 10_000_000,
         }
     }
-    
+
     /// Check if a file path is allowed for reading.
     pub fn is_read_allowed(&self, path: &std::path::Path) -> bool {
         if !self.allow_read {
             return false;
         }
-        
+
         if self.allowed_read_dirs.is_empty() {
             return true;
         }
-        
-        self.allowed_read_dirs.iter().any(|dir| path.starts_with(dir))
+
+        self.allowed_read_dirs
+            .iter()
+            .any(|dir| path.starts_with(dir))
     }
-    
+
     /// Check if a file path is allowed for writing.
     pub fn is_write_allowed(&self, path: &std::path::Path) -> bool {
         if !self.allow_write {
             return false;
         }
-        
+
         if self.allowed_write_dirs.is_empty() {
             return true;
         }
-        
-        self.allowed_write_dirs.iter().any(|dir| path.starts_with(dir))
+
+        self.allowed_write_dirs
+            .iter()
+            .any(|dir| path.starts_with(dir))
     }
-    
+
     /// Check if a network host is allowed.
     pub fn is_host_allowed(&self, host: &str) -> bool {
         if !self.allow_network {
             return false;
         }
-        
+
         if self.allowed_hosts.is_empty() {
             return true;
         }
-        
+
         self.allowed_hosts.iter().any(|h| host.contains(h))
     }
 }
@@ -206,7 +210,7 @@ impl Sandbox {
             iteration_count: 0,
         }
     }
-    
+
     /// Create a sandbox with custom configuration.
     pub fn with_config(config: SandboxConfig) -> Self {
         let mut sandbox = Self::new();
@@ -214,12 +218,12 @@ impl Sandbox {
         sandbox.config = config;
         sandbox
     }
-    
+
     /// Create a strict sandbox (maximum security).
     pub fn strict() -> Self {
         Self::with_config(SandboxConfig::strict())
     }
-    
+
     /// Create a permissive sandbox (development mode).
     pub fn permissive() -> Self {
         Self::with_config(SandboxConfig::permissive())
@@ -296,7 +300,10 @@ impl Sandbox {
     pub fn increment_iteration(&mut self) -> std::result::Result<(), SecurityViolation> {
         self.iteration_count += 1;
         if self.iteration_count > self.max_loop_iterations {
-            debug!("Sandbox: Loop iteration limit exceeded: {}", self.iteration_count);
+            debug!(
+                "Sandbox: Loop iteration limit exceeded: {}",
+                self.iteration_count
+            );
             return Err(SecurityViolation::LoopIterationLimitExceeded);
         }
         Ok(())
@@ -307,7 +314,7 @@ impl Sandbox {
         if !self.config.is_read_allowed(path) {
             debug!("Sandbox: File read not allowed: {:?}", path);
             return Err(SecurityViolation::FileReadNotAllowed(
-                path.to_string_lossy().to_string()
+                path.to_string_lossy().to_string(),
             ));
         }
         Ok(())
@@ -318,7 +325,7 @@ impl Sandbox {
         if !self.config.is_write_allowed(path) {
             debug!("Sandbox: File write not allowed: {:?}", path);
             return Err(SecurityViolation::FileWriteNotAllowed(
-                path.to_string_lossy().to_string()
+                path.to_string_lossy().to_string(),
             ));
         }
         Ok(())
@@ -361,16 +368,20 @@ impl Sandbox {
             ("os.remove", "File deletion"),
             ("os.rename", "File renaming"),
         ];
-        
+
         for (pattern, description) in dangerous_patterns {
             if code.contains(pattern) {
-                debug!("Sandbox: Dangerous pattern detected: {} ({})", pattern, description);
-                return Err(SecurityViolation::DangerousPatternDetected(
-                    format!("{} ({})", pattern, description)
-                ));
+                debug!(
+                    "Sandbox: Dangerous pattern detected: {} ({})",
+                    pattern, description
+                );
+                return Err(SecurityViolation::DangerousPatternDetected(format!(
+                    "{} ({})",
+                    pattern, description
+                )));
             }
         }
-        
+
         Ok(())
     }
 
@@ -420,10 +431,10 @@ mod tests {
     #[test]
     fn sandbox_validates_script() {
         let sandbox = Sandbox::new();
-        
+
         // Should pass for safe code
         assert!(sandbox.validate_script("print('hello')").is_ok());
-        
+
         // Should fail for dangerous code
         assert!(sandbox.validate_script("os.execute('rm -rf /')").is_err());
         assert!(sandbox.validate_script("io.popen('ls')").is_err());
@@ -432,12 +443,12 @@ mod tests {
     #[test]
     fn sandbox_checks_time_limit() {
         let mut sandbox = Sandbox::new().with_time_limit(1); // 1ms
-        
+
         sandbox.start_timer();
-        
+
         // Should pass immediately
         assert!(sandbox.check_time_limit().is_ok());
-        
+
         // Wait and check again
         std::thread::sleep(std::time::Duration::from_millis(10));
         assert!(sandbox.check_time_limit().is_err());
@@ -447,7 +458,7 @@ mod tests {
     fn sandbox_checks_file_read() {
         let mut sandbox = Sandbox::new();
         sandbox.config.allow_read = false;
-        
+
         let path = std::path::Path::new("/etc/passwd");
         assert!(sandbox.check_file_read(path).is_err());
     }
@@ -456,7 +467,7 @@ mod tests {
     fn sandbox_checks_file_write() {
         let mut sandbox = Sandbox::new();
         sandbox.config.allow_write = false;
-        
+
         let path = std::path::Path::new("/tmp/test.txt");
         assert!(sandbox.check_file_write(path).is_err());
     }
