@@ -104,7 +104,7 @@ impl RustisaurEngine {
         debug!(
             "Script executed in {}ms (cache: {})",
             execution_time,
-            if cached.bytecode.len() > 0 {
+            if !cached.bytecode.is_empty() {
                 "HIT"
             } else {
                 "MISS"
@@ -210,11 +210,10 @@ impl RustisaurEngine {
 
     /// Get performance statistics.
     pub fn performance_stats(&self) -> PerformanceStats {
-        let avg_time = if self.execution_count > 0 {
-            self.total_execution_time_ms / self.execution_count
-        } else {
-            0
-        };
+        let avg_time = self
+            .total_execution_time_ms
+            .checked_div(self.execution_count)
+            .unwrap_or(0);
 
         PerformanceStats {
             total_executions: self.execution_count,
