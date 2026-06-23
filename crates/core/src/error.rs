@@ -50,4 +50,7 @@ pub enum EngineError {
 
     #[error("Configuration error: {0}")]
     Config(String),
+
+    #[error("Runtime error: {0}")]
+    Runtime(String),
 }

@@ -343,6 +343,6 @@ mod tests {
         engine.execute_script("return 2").unwrap();
 
         let stats = engine.performance_stats();
-        assert!(stats.total_executions >= 0);
+        assert!(stats.total_executions == 2);
     }
 }
