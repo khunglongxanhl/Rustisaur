@@ -97,9 +97,10 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
 
     rex.set("fs", fs)?;
 
-    // Register rex.string module
+    // Register rex.string module (ENHANCED)
     let string = lua.create_table()?;
 
+    // Basic transformations
     string.set(
         "upper",
         lua.create_function(|_, s: String| Ok(s.to_uppercase()))?,
@@ -108,6 +109,155 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
     string.set(
         "lower",
         lua.create_function(|_, s: String| Ok(s.to_lowercase()))?,
+    )?;
+
+    string.set(
+        "trim",
+        lua.create_function(|_, s: String| Ok(s.trim().to_string()))?,
+    )?;
+
+    string.set(
+        "trim_left",
+        lua.create_function(|_, s: String| Ok(s.trim_start().to_string()))?,
+    )?;
+
+    string.set(
+        "trim_right",
+        lua.create_function(|_, s: String| Ok(s.trim_end().to_string()))?,
+    )?;
+
+    // Split and join
+    string.set(
+        "split",
+        lua.create_function(|lua, (s, delim): (String, String)| {
+            let parts = s.split(&delim).collect::<Vec<&str>>();
+            let table = lua.create_table()?;
+            for (i, part) in parts.iter().enumerate() {
+                table.set(i + 1, *part)?;
+            }
+            Ok(table)
+        })?,
+    )?;
+
+    string.set(
+        "join",
+        lua.create_function(|_, (table, delim): (Table, String)| {
+            let mut parts = Vec::new();
+            for pair in table.pairs::<i64, String>() {
+                let (_, value) = pair?;
+                parts.push(value);
+            }
+            Ok(parts.join(&delim))
+        })?,
+    )?;
+
+    // Replace
+    string.set(
+        "replace",
+        lua.create_function(|_, (s, from, to): (String, String, String)| {
+            Ok(s.replacen(&from, &to, 1))
+        })?,
+    )?;
+
+    string.set(
+        "replace_all",
+        lua.create_function(
+            |_, (s, from, to): (String, String, String)| Ok(s.replace(&from, &to)),
+        )?,
+    )?;
+
+    // Check functions
+    string.set(
+        "starts_with",
+        lua.create_function(|_, (s, prefix): (String, String)| Ok(s.starts_with(&prefix)))?,
+    )?;
+
+    string.set(
+        "ends_with",
+        lua.create_function(|_, (s, suffix): (String, String)| Ok(s.ends_with(&suffix)))?,
+    )?;
+
+    string.set(
+        "contains",
+        lua.create_function(|_, (s, pattern): (String, String)| Ok(s.contains(&pattern)))?,
+    )?;
+
+    // Transform functions
+    string.set(
+        "capitalize",
+        lua.create_function(|_, s: String| {
+            let mut chars = s.chars();
+            match chars.next() {
+                None => Ok(String::new()),
+                Some(c) => {
+                    let capitalized = c.to_uppercase().to_string();
+                    let rest: String = chars.collect::<String>().to_lowercase();
+                    Ok(capitalized + &rest)
+                }
+            }
+        })?,
+    )?;
+
+    string.set(
+        "repeat",
+        lua.create_function(|_, (s, count): (String, usize)| Ok(s.repeat(count)))?,
+    )?;
+
+    string.set(
+        "slice",
+        lua.create_function(|_, (s, start, end): (String, usize, usize)| {
+            let sliced: String = s
+                .chars()
+                .skip(start)
+                .take(end.saturating_sub(start))
+                .collect();
+            Ok(sliced)
+        })?,
+    )?;
+
+    string.set(
+        "reverse",
+        lua.create_function(|_, s: String| Ok(s.chars().rev().collect::<String>()))?,
+    )?;
+
+    // Pad functions
+    string.set(
+        "pad_left",
+        lua.create_function(|_, (s, width, ch): (String, usize, String)| {
+            let pad_char = ch.chars().next().unwrap_or(' ');
+            let current_len = s.chars().count();
+            if current_len >= width {
+                Ok(s)
+            } else {
+                let padding = pad_char.to_string().repeat(width - current_len);
+                Ok(padding + &s)
+            }
+        })?,
+    )?;
+
+    string.set(
+        "pad_right",
+        lua.create_function(|_, (s, width, ch): (String, usize, String)| {
+            let pad_char = ch.chars().next().unwrap_or(' ');
+            let current_len = s.chars().count();
+            if current_len >= width {
+                Ok(s)
+            } else {
+                let padding = pad_char.to_string().repeat(width - current_len);
+                Ok(s + &padding)
+            }
+        })?,
+    )?;
+
+    // Length and check functions
+    string.set(
+        "len",
+        lua.create_function(|_, s: String| Ok(s.chars().count()))?,
+    )?;
+
+    string.set(
+        "is_empty",
+        lua.create_function(|_, s: String| Ok(s.trim().is_empty()))?,
     )?;
 
     rex.set("string", string)?;
