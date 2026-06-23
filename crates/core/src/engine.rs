@@ -1,5 +1,6 @@
 //! Main Rustisaur engine.
 
+use std::cell::Cell;
 use std::path::Path;
 use std::time::Instant;
 
@@ -22,8 +23,8 @@ pub struct RustisaurEngine {
     runtime: RexRuntime,
     active: bool,
     script_cache: ScriptCache,
-    execution_count: u64,
-    total_execution_time_ms: u64,
+    execution_count: Cell<u64>,
+    total_execution_time_ms: Cell<u64>,
 }
 
 impl RustisaurEngine {
@@ -67,8 +68,8 @@ impl RustisaurEngine {
             runtime,
             active: true,
             script_cache,
-            execution_count: 0,
-            total_execution_time_ms: 0,
+            execution_count: Cell::new(0),
+            total_execution_time_ms: Cell::new(0),
         })
     }
 
@@ -101,6 +102,11 @@ impl RustisaurEngine {
 
         let execution_time = start_time.elapsed().as_millis() as u64;
 
+        // Update execution statistics (using Cell for interior mutability)
+        self.execution_count.set(self.execution_count.get() + 1);
+        self.total_execution_time_ms
+            .set(self.total_execution_time_ms.get() + execution_time);
+
         debug!(
             "Script executed in {}ms (cache: {})",
             execution_time,
@@ -129,6 +135,12 @@ impl RustisaurEngine {
         let results = self.lua_manager.execute_file(path)?;
 
         let execution_time = start_time.elapsed().as_millis() as u64;
+
+        // Update execution statistics
+        self.execution_count.set(self.execution_count.get() + 1);
+        self.total_execution_time_ms
+            .set(self.total_execution_time_ms.get() + execution_time);
+
         debug!("File executed in {}ms: {}", execution_time, path.display());
 
         Ok(results.into_iter().next().unwrap_or(Value::Nil))
@@ -208,16 +220,23 @@ impl RustisaurEngine {
         info!("Script cache cleared");
     }
 
+    /// Reset performance statistics.
+    pub fn reset_stats(&self) {
+        self.execution_count.set(0);
+        self.total_execution_time_ms.set(0);
+        info!("Performance statistics reset");
+    }
+
     /// Get performance statistics.
     pub fn performance_stats(&self) -> PerformanceStats {
-        let avg_time = self
-            .total_execution_time_ms
-            .checked_div(self.execution_count)
-            .unwrap_or(0);
+        let total_executions = self.execution_count.get();
+        let total_time_ms = self.total_execution_time_ms.get();
+
+        let avg_time = total_time_ms.checked_div(total_executions).unwrap_or(0);
 
         PerformanceStats {
-            total_executions: self.execution_count,
-            total_time_ms: self.total_execution_time_ms,
+            total_executions,
+            total_time_ms,
             average_time_ms: avg_time,
             cache_stats: self.script_cache.stats(),
         }
@@ -343,6 +362,19 @@ mod tests {
         engine.execute_script("return 2").unwrap();
 
         let stats = engine.performance_stats();
-        assert!(stats.total_executions == 2);
+        assert_eq!(stats.total_executions, 2);
+    }
+
+    #[test]
+    fn engine_reset_stats() {
+        let engine = RustisaurEngine::new(EngineConfig::default()).unwrap();
+
+        engine.execute_script("return 1").unwrap();
+        engine.execute_script("return 2").unwrap();
+
+        assert_eq!(engine.performance_stats().total_executions, 2);
+
+        engine.reset_stats();
+        assert_eq!(engine.performance_stats().total_executions, 0);
     }
 }
