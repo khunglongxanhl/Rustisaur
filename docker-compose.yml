@@ -1,0 +1,19 @@
+version: '3.8'
+services:
+  rustisaur:
+    build: .
+    container_name: rustisaur_bot
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      - ./examples:/app/examples:ro  
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      - RUST_LOG=info
