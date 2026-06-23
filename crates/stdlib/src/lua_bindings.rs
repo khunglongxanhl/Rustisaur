@@ -301,15 +301,14 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         lua.create_function(|lua, path: String| {
             let entries = std::fs::read_dir(&path)
                 .map_err(|e| mlua::Error::RuntimeError(format!("Directory list error: {}", e)))?;
+
             let table = lua.create_table()?;
-            let mut index = 1;
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    let name = entry.file_name().to_string_lossy().to_string();
-                    table.set(index, name)?;
-                    index += 1;
-                }
+
+            for (index, entry) in entries.flatten().enumerate() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                table.set(index + 1, name)?; // Lua arrays start at 1
             }
+
             Ok(table)
         })?,
     )?;
