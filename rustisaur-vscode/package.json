@@ -1,0 +1,36 @@
+{
+    "name": "rustisaur",
+    "displayName": "Rustisaur Language Support",
+    "description": "Syntax highlighting and file icon for Rustisaur (.rex) files",
+    "version": "0.1.0",
+    "publisher": "khunglongxanhl",
+    "repository": {
+      "type": "git",
+      "url": "https://github.com/khunglongxanhl/Rustisaur"
+    },
+    "engines": {
+      "vscode": "^1.80.0"
+    },
+    "categories": ["Programming Languages", "Themes"],
+    "contributes": {
+      "languages": [
+        {
+          "id": "rex",
+          "aliases": ["Rex", "Rustisaur", "rex"],
+          "extensions": [".rex"],
+          "configuration": "./language-configuration.json",
+          "icon": {
+            "light": "./icons/Logo-Rustisaur.png",
+            "dark": "./icons/Logo-Rustisaur.png"
+          }
+        }
+      ],
+      "grammars": [
+        {
+          "language": "rex",
+          "scopeName": "source.rex",
+          "path": "./syntaxes/rex.tmLanguage.json"
+        }
+      ]
+    }
+  }

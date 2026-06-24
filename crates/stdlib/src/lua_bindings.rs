@@ -1,17 +1,21 @@
-//! Lua bindings for the standard library.
+//! Lua bindings for the standard library with LAZY LOADING.
 
 use mlua::{Lua, Result as LuaResult, Table, Value, Variadic};
 use serde_json;
+use tracing::info;
 
 use crate::error::StdlibError;
 
 /// Register all standard library functions into the Lua state.
+/// Uses lazy loading: modules are only created when first accessed.
 pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
     let rex = lua.create_table()?;
 
     // ========================================
-    // rex.print - Print output
+    // EAGER LOAD: Always needed, load immediately
     // ========================================
+
+    // rex.print - Print output
     rex.set(
         "print",
         lua.create_function(|_, msg: String| {
@@ -20,9 +24,8 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         })?,
     )?;
 
-    // ========================================
     // rex.input - Read input
-    // ========================================
+
     rex.set(
         "input",
         lua.create_function(|_, prompt: String| {
@@ -36,8 +39,52 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
     )?;
 
     // ========================================
-    // rex.json - JSON operations
+    // LAZY LOAD: Only created when first accessed
     // ========================================
+
+    let metatable = lua.create_table()?;
+
+    metatable.set(
+        "__index",
+        lua.create_function(|lua, (rex, key): (Table, String)| {
+            info!("🔄 Lazy loading module: rex.{}", key);
+
+            let module = match key.as_str() {
+                "json" => create_json_module(lua)?,
+                "table" => create_table_module(lua)?,
+                "fs" => create_fs_module(lua)?,
+                "string" => create_string_module(lua)?,
+                "math" => create_math_module(lua)?,
+                "os" => create_os_module(lua)?,
+                _ => {
+                    return Err(mlua::Error::RuntimeError(format!(
+                        "Unknown module: rex.{}",
+                        key
+                    )));
+                }
+            };
+
+            // Cache the module into rex table for future access
+            rex.set(key.as_str(), module.clone())?;
+
+            Ok(Value::Table(module))
+        })?,
+    )?;
+
+    rex.set_metatable(Some(metatable));
+
+    // Set rex as global
+    lua.globals().set("rex", rex)?;
+
+    Ok(())
+}
+
+// ========================================
+// MODULE FACTORIES - Each creates a module on demand
+// ========================================
+
+/// Create rex.json module
+fn create_json_module(lua: &Lua) -> LuaResult<Table<'_>> {
     let json = lua.create_table()?;
 
     json.set(
@@ -58,20 +105,18 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         })?,
     )?;
 
-    rex.set("json", json)?;
+    Ok(json)
+}
 
-    // ========================================
-    // rex.table - Table operations (ENHANCED)
-    // ========================================
+/// Create rex.table module
+fn create_table_module(lua: &Lua) -> LuaResult<Table<'_>> {
     let table = lua.create_table()?;
 
-    // Get table length
     table.set(
         "length",
         lua.create_function(|_, t: Table| Ok(t.len().unwrap_or(0)))?,
     )?;
 
-    // Get all keys
     table.set(
         "keys",
         lua.create_function(|lua, t: Table| {
@@ -84,7 +129,6 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         })?,
     )?;
 
-    // Get all values
     table.set(
         "values",
         lua.create_function(|lua, t: Table| {
@@ -97,7 +141,6 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         })?,
     )?;
 
-    // Merge two tables
     table.set(
         "merge",
         lua.create_function(|lua, (t1, t2): (Table, Table)| {
@@ -114,7 +157,6 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         })?,
     )?;
 
-    // Filter table by predicate
     table.set(
         "filter",
         lua.create_function(|lua, (t, func): (Table, mlua::Function)| {
@@ -132,7 +174,6 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         })?,
     )?;
 
-    // Map table values
     table.set(
         "map",
         lua.create_function(|lua, (t, func): (Table, mlua::Function)| {
@@ -146,7 +187,6 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         })?,
     )?;
 
-    // Check if table contains value
     table.set(
         "contains",
         lua.create_function(|_, (t, value): (Table, Value)| {
@@ -160,7 +200,6 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         })?,
     )?;
 
-    // Reverse table
     table.set(
         "reverse",
         lua.create_function(|lua, t: Table| {
@@ -174,7 +213,6 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         })?,
     )?;
 
-    // Sort table
     table.set(
         "sort",
         lua.create_function(|lua, t: Table| {
@@ -199,7 +237,6 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         })?,
     )?;
 
-    // Get unique values
     table.set(
         "unique",
         lua.create_function(|lua, t: Table| {
@@ -218,14 +255,13 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         })?,
     )?;
 
-    rex.set("table", table)?;
+    Ok(table)
+}
 
-    // ========================================
-    // rex.fs - File system operations (ENHANCED)
-    // ========================================
+/// Create rex.fs module
+fn create_fs_module(lua: &Lua) -> LuaResult<Table<'_>> {
     let fs = lua.create_table()?;
 
-    // Read file
     fs.set(
         "read",
         lua.create_function(|_, path: String| {
@@ -234,7 +270,6 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         })?,
     )?;
 
-    // Write file
     fs.set(
         "write",
         lua.create_function(|_, (path, content): (String, String)| {
@@ -243,25 +278,21 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         })?,
     )?;
 
-    // Check if file/directory exists
     fs.set(
         "exists",
         lua.create_function(|_, path: String| Ok(std::path::Path::new(&path).exists()))?,
     )?;
 
-    // Check if path is a file
     fs.set(
         "is_file",
         lua.create_function(|_, path: String| Ok(std::path::Path::new(&path).is_file()))?,
     )?;
 
-    // Check if path is a directory
     fs.set(
         "is_dir",
         lua.create_function(|_, path: String| Ok(std::path::Path::new(&path).is_dir()))?,
     )?;
 
-    // Delete file or empty directory
     fs.set(
         "delete",
         lua.create_function(|_, path: String| {
@@ -277,7 +308,6 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         })?,
     )?;
 
-    // Create directory
     fs.set(
         "mkdir",
         lua.create_function(|_, path: String| {
@@ -286,7 +316,6 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         })?,
     )?;
 
-    // Create directory and all parent directories
     fs.set(
         "mkdir_all",
         lua.create_function(|_, path: String| {
@@ -295,25 +324,20 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         })?,
     )?;
 
-    // List directory contents
     fs.set(
         "list",
         lua.create_function(|lua, path: String| {
             let entries = std::fs::read_dir(&path)
                 .map_err(|e| mlua::Error::RuntimeError(format!("Directory list error: {}", e)))?;
-
             let table = lua.create_table()?;
-
             for (index, entry) in entries.flatten().enumerate() {
                 let name = entry.file_name().to_string_lossy().to_string();
-                table.set(index + 1, name)?; // Lua arrays start at 1
+                table.set(index + 1, name)?;
             }
-
             Ok(table)
         })?,
     )?;
 
-    // Rename/move file or directory
     fs.set(
         "rename",
         lua.create_function(|_, (from, to): (String, String)| {
@@ -322,7 +346,6 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         })?,
     )?;
 
-    // Copy file
     fs.set(
         "copy",
         lua.create_function(|_, (from, to): (String, String)| {
@@ -332,7 +355,6 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         })?,
     )?;
 
-    // Get file metadata
     fs.set(
         "metadata",
         lua.create_function(|lua, path: String| {
@@ -351,7 +373,6 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         })?,
     )?;
 
-    // Get absolute path
     fs.set(
         "absolute",
         lua.create_function(|_, path: String| {
@@ -361,7 +382,6 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         })?,
     )?;
 
-    // Get file extension
     fs.set(
         "extension",
         lua.create_function(|_, path: String| {
@@ -374,7 +394,6 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         })?,
     )?;
 
-    // Get file name
     fs.set(
         "file_name",
         lua.create_function(|_, path: String| {
@@ -387,7 +406,6 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         })?,
     )?;
 
-    // Get parent directory
     fs.set(
         "parent",
         lua.create_function(|_, path: String| {
@@ -400,40 +418,34 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         })?,
     )?;
 
-    rex.set("fs", fs)?;
+    Ok(fs)
+}
 
-    // ========================================
-    // rex.string - String operations (ENHANCED)
-    // ========================================
+/// Create rex.string module
+fn create_string_module(lua: &Lua) -> LuaResult<Table<'_>> {
     let string = lua.create_table()?;
 
-    // Basic transformations
     string.set(
         "upper",
         lua.create_function(|_, s: String| Ok(s.to_uppercase()))?,
     )?;
-
     string.set(
         "lower",
         lua.create_function(|_, s: String| Ok(s.to_lowercase()))?,
     )?;
-
     string.set(
         "trim",
         lua.create_function(|_, s: String| Ok(s.trim().to_string()))?,
     )?;
-
     string.set(
         "trim_left",
         lua.create_function(|_, s: String| Ok(s.trim_start().to_string()))?,
     )?;
-
     string.set(
         "trim_right",
         lua.create_function(|_, s: String| Ok(s.trim_end().to_string()))?,
     )?;
 
-    // Split and join
     string.set(
         "split",
         lua.create_function(|lua, (s, delim): (String, String)| {
@@ -458,7 +470,6 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         })?,
     )?;
 
-    // Replace
     string.set(
         "replace",
         lua.create_function(|_, (s, from, to): (String, String, String)| {
@@ -473,7 +484,6 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         )?,
     )?;
 
-    // Check functions
     string.set(
         "starts_with",
         lua.create_function(|_, (s, prefix): (String, String)| Ok(s.starts_with(&prefix)))?,
@@ -489,7 +499,6 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         lua.create_function(|_, (s, pattern): (String, String)| Ok(s.contains(&pattern)))?,
     )?;
 
-    // Transform functions
     string.set(
         "capitalize",
         lua.create_function(|_, s: String| {
@@ -527,7 +536,6 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         lua.create_function(|_, s: String| Ok(s.chars().rev().collect::<String>()))?,
     )?;
 
-    // Pad functions
     string.set(
         "pad_left",
         lua.create_function(|_, (s, width, ch): (String, usize, String)| {
@@ -556,25 +564,22 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         })?,
     )?;
 
-    // Length and check functions
     string.set(
         "len",
         lua.create_function(|_, s: String| Ok(s.chars().count()))?,
     )?;
-
     string.set(
         "is_empty",
         lua.create_function(|_, s: String| Ok(s.trim().is_empty()))?,
     )?;
 
-    rex.set("string", string)?;
+    Ok(string)
+}
 
-    // ========================================
-    // rex.math - Math operations (ENHANCED)
-    // ========================================
+/// Create rex.math module
+fn create_math_module(lua: &Lua) -> LuaResult<Table<'_>> {
     let math = lua.create_table()?;
 
-    // Max value
     math.set(
         "max",
         lua.create_function(|_, nums: Variadic<f64>| {
@@ -582,7 +587,6 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         })?,
     )?;
 
-    // Min value
     math.set(
         "min",
         lua.create_function(|_, nums: Variadic<f64>| {
@@ -590,28 +594,16 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         })?,
     )?;
 
-    // Absolute value
     math.set("abs", lua.create_function(|_, n: f64| Ok(n.abs()))?)?;
-
-    // Round to nearest integer
     math.set("round", lua.create_function(|_, n: f64| Ok(n.round()))?)?;
-
-    // Floor (round down)
     math.set("floor", lua.create_function(|_, n: f64| Ok(n.floor()))?)?;
-
-    // Ceil (round up)
     math.set("ceil", lua.create_function(|_, n: f64| Ok(n.ceil()))?)?;
-
-    // Power
     math.set(
         "pow",
         lua.create_function(|_, (base, exp): (f64, f64)| Ok(base.powf(exp)))?,
     )?;
-
-    // Square root
     math.set("sqrt", lua.create_function(|_, n: f64| Ok(n.sqrt()))?)?;
 
-    // Random number between min and max
     math.set(
         "random",
         lua.create_function(|_, (min, max): (f64, f64)| {
@@ -625,26 +617,20 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         })?,
     )?;
 
-    // Pi constant
     math.set("pi", lua.create_function(|_, ()| Ok(std::f64::consts::PI))?)?;
-
-    // E constant
     math.set("e", lua.create_function(|_, ()| Ok(std::f64::consts::E))?)?;
-
-    // Sum of numbers
     math.set(
         "sum",
         lua.create_function(|_, nums: Variadic<f64>| Ok(nums.iter().sum::<f64>()))?,
     )?;
 
-    rex.set("math", math)?;
+    Ok(math)
+}
 
-    // ========================================
-    // rex.os - OS operations (NEW)
-    // ========================================
+/// Create rex.os module
+fn create_os_module(lua: &Lua) -> LuaResult<Table<'_>> {
     let os = lua.create_table()?;
 
-    // Get current timestamp
     os.set(
         "time",
         lua.create_function(|_, ()| {
@@ -655,7 +641,6 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         })?,
     )?;
 
-    // Sleep for milliseconds
     os.set(
         "sleep",
         lua.create_function(|_, ms: u64| {
@@ -664,13 +649,11 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         })?,
     )?;
 
-    // Get environment variable
     os.set(
         "env",
         lua.create_function(|_, name: String| Ok(std::env::var(&name).unwrap_or_default()))?,
     )?;
 
-    // Get current working directory
     os.set(
         "cwd",
         lua.create_function(|_, ()| {
@@ -680,7 +663,6 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         })?,
     )?;
 
-    // Get command line arguments
     os.set(
         "args",
         lua.create_function(|lua, ()| {
@@ -692,13 +674,12 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
         })?,
     )?;
 
-    rex.set("os", os)?;
-
-    // Set rex as global
-    lua.globals().set("rex", rex)?;
-
-    Ok(())
+    Ok(os)
 }
+
+// ========================================
+// HELPER FUNCTIONS - JSON conversion
+// ========================================
 
 /// Convert serde_json::Value to Lua Value.
 fn json_value_to_lua<'lua>(lua: &'lua Lua, value: &serde_json::Value) -> LuaResult<Value<'lua>> {
@@ -757,7 +738,6 @@ fn lua_value_to_json_with_depth(
         )),
         Value::String(s) => Ok(serde_json::Value::String(s.to_str()?.to_string())),
         Value::Table(t) => {
-            // First, check if it's a pure array (sequential integer keys starting from 1)
             let len = t.len().unwrap_or(0);
             if len > 0 {
                 let mut arr = Vec::with_capacity(len as usize);
@@ -780,7 +760,6 @@ fn lua_value_to_json_with_depth(
                 }
             }
 
-            // Convert as object
             let mut obj = serde_json::Map::new();
             for pair in t.clone().pairs::<Value, Value>() {
                 let (key, val) = pair?;
