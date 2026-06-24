@@ -1,36 +1,56 @@
 {
-    "name": "rustisaur",
-    "displayName": "Rustisaur Language Support",
-    "description": "Syntax highlighting and file icon for Rustisaur (.rex) files",
-    "version": "0.1.0",
-    "publisher": "khunglongxanhl",
-    "repository": {
-      "type": "git",
-      "url": "https://github.com/khunglongxanhl/Rustisaur"
-    },
-    "engines": {
-      "vscode": "^1.80.0"
-    },
-    "categories": ["Programming Languages", "Themes"],
-    "contributes": {
-      "languages": [
-        {
-          "id": "rex",
-          "aliases": ["Rex", "Rustisaur", "rex"],
-          "extensions": [".rex"],
-          "configuration": "./language-configuration.json",
-          "icon": {
-            "light": "./icons/Logo-Rustisaur.png",
-            "dark": "./icons/Logo-Rustisaur.png"
-          }
+  "name": "rustisaur",
+  "displayName": "Rustisaur Language Support",
+  "description": "Syntax highlighting and file icon for Rustisaur (.rex) files - Created by khunglongxanhl",
+  "version": "0.1.0",
+  "publisher": "khunglongxanhl",
+  "author": {
+    "name": "khunglongxanhl",
+    "url": "https://github.com/khunglongxanhl"
+  },
+  "license": "MIT",
+  "copyright": "Copyright (c) 2026 khunglongxanhl. All rights reserved.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/khunglongxanhl/Rustisaur"
+  },
+  "homepage": "https://github.com/khunglongxanhl/Rustisaur",
+  "bugs": {
+    "url": "https://github.com/khunglongxanhl/Rustisaur/issues"
+  },
+  "icon": "icons/Logo-Rustisaur.png",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Themes"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "rex",
+        "aliases": [
+          "Rex",
+          "Rustisaur",
+          "rex"
+        ],
+        "extensions": [
+          ".rex"
+        ],
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/Logo-Rustisaur.png",
+          "dark": "./icons/Logo-Rustisaur.png"
         }
-      ],
-      "grammars": [
-        {
-          "language": "rex",
-          "scopeName": "source.rex",
-          "path": "./syntaxes/rex.tmLanguage.json"
-        }
-      ]
-    }
+      }
+    ],
+    "grammars": [
+      {
+        "language": "rex",
+        "scopeName": "source.rex",
+        "path": "./syntaxes/rex.tmLanguage.json"
+      }
+    ]
   }
+}
