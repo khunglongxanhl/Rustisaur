@@ -29,4 +29,7 @@ pub enum StdlibError {
 
     #[error("TOML error: {0}")]
     Toml(String),
+
+    #[error("Runtime error: {0}")]
+    Runtime(String),
 }

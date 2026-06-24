@@ -24,3 +24,11 @@ notify = { workspace = true }
 chrono = { workspace = true }
 rand = { workspace = true }
 tracing = { workspace = true }
+
+# 1. SQLite cho "Hard Tasks" (Lưu trữ bền vững, Query phức tạp)
+# Tính năng "bundled" giúp tự động biên dịch SQLite vào file .exe, người dùng không cần cài đặt gì thêm!
+rusqlite = { version = "0.31", features = ["bundled"] }
+
+# 2. DashMap cho "Tốc độ phản lực" (Cache trong RAM)
+# Đây là HashMap siêu nhanh, hỗ trợ đa luồng, giống hệt cách Redis lưu dữ liệu trong RAM.
+dashmap = "5.5"

@@ -5,10 +5,18 @@ use serde_json;
 use tracing::info;
 
 use crate::error::StdlibError;
+use crate::store::{create_cache_module, create_db_module, CacheStore, Database};
 
 /// Register all standard library functions into the Lua state.
 /// Uses lazy loading: modules are only created when first accessed.
 pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
+    // Khởi tạo Cache (Redis-like) - TỐC ĐỘ PHẢN LỰC
+    let cache_store = CacheStore::new();
+
+    // Khởi tạo Database (SQLite) - HARD TASKS
+    let database = Database::open("rustisaur.db")
+        .map_err(|e| StdlibError::Runtime(format!("Failed to open database: {}", e)))?;
+
     let rex = lua.create_table()?;
 
     // ========================================
@@ -25,7 +33,6 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
     )?;
 
     // rex.input - Read input
-
     rex.set(
         "input",
         lua.create_function(|_, prompt: String| {
@@ -37,6 +44,21 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
             Ok(input.trim().to_string())
         })?,
     )?;
+
+    // ========================================
+    // rex.store - HYBRID STORAGE (Cache + Database)
+    // ========================================
+    let store = lua.create_table()?;
+
+    // rex.store.cache - Tốc độ phản lực (Redis-like)
+    let cache_module = create_cache_module(lua, cache_store)?;
+    store.set("cache", cache_module)?;
+
+    // rex.store.db - Hard tasks (SQLite)
+    let db_module = create_db_module(lua, database)?;
+    store.set("db", db_module)?;
+
+    rex.set("store", store)?;
 
     // ========================================
     // LAZY LOAD: Only created when first accessed
