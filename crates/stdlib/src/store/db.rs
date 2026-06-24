@@ -6,6 +6,7 @@
 //! - 📊 Complex queries: WHERE, JOIN, GROUP BY, ORDER BY
 //! - 💾 Persistent: Data tồn tại mãi mãi
 //! - 🧵 Thread-safe: Hoạt động tốt với async/multi-thread
+//! - 🔄 Retry logic: Tự động retry khi database bị locked
 
 use mlua::{Lua, Result as LuaResult, Table, Value};
 use rusqlite::Connection;
@@ -18,18 +19,37 @@ pub struct Database {
 }
 
 impl Database {
-    /// Mở hoặc tạo database mới
+    /// Mở hoặc tạo database mới với retry logic
     pub fn open(path: &str) -> LuaResult<Self> {
-        let conn = Connection::open(path)
-            .map_err(|e| mlua::Error::RuntimeError(format!("Failed to open database: {}", e)))?;
+        let mut attempts = 0;
+        let max_attempts = 3;
 
-        // Enable WAL mode for better concurrent performance
-        conn.execute_batch("PRAGMA journal_mode=WAL;")
-            .map_err(|e| mlua::Error::RuntimeError(format!("Failed to set WAL mode: {}", e)))?;
+        loop {
+            match Connection::open(path) {
+                Ok(conn) => {
+                    // Enable WAL mode for better concurrent performance
+                    if let Err(e) = conn.execute_batch("PRAGMA journal_mode=WAL;") {
+                        // Nếu failed set WAL, continue without it (không critical)
+                        eprintln!("Warning: Failed to set WAL mode: {}", e);
+                    }
 
-        Ok(Self {
-            conn: Arc::new(Mutex::new(conn)),
-        })
+                    return Ok(Self {
+                        conn: Arc::new(Mutex::new(conn)),
+                    });
+                }
+                Err(e) => {
+                    attempts += 1;
+                    if attempts >= max_attempts {
+                        return Err(mlua::Error::RuntimeError(format!(
+                            "Failed to open database after {} attempts: {}",
+                            max_attempts, e
+                        )));
+                    }
+                    // Wait before retry (exponential backoff)
+                    std::thread::sleep(std::time::Duration::from_millis(100 * attempts as u64));
+                }
+            }
+        }
     }
 
     /// Execute SQL query (INSERT, UPDATE, DELETE, CREATE TABLE, etc.)
