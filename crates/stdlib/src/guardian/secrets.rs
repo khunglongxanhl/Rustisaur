@@ -53,7 +53,7 @@ pub enum SecretAccessType {
 }
 
 impl SecretAccessType {
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "read" => Some(SecretAccessType::Read),
             "write" => Some(SecretAccessType::Write),
