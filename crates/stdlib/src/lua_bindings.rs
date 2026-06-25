@@ -2,9 +2,12 @@
 
 use mlua::{Lua, Result as LuaResult, Table, Value, Variadic};
 use serde_json;
+use std::sync::{Arc, Mutex}; // ✅ THÊM DÒNG NÀY
 use tracing::info;
 
 use crate::error::StdlibError;
+use crate::guardian::network::NetworkConfig;
+use crate::guardian::{Guardian, GuardianConfig};
 use crate::store::{create_cache_module, create_db_module, CacheStore, Database};
 
 /// Register all standard library functions into the Lua state.
@@ -17,8 +20,20 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
     let database = Database::open("rustisaur.db")
         .map_err(|e| StdlibError::Runtime(format!("Failed to open database: {}", e)))?;
 
+    // Khởi tạo Guardian - Multi-layer Security
+    let guardian_config = GuardianConfig {
+        network: NetworkConfig::default(),
+        interactive_mode: true,
+        log_all_requests: true,
+    };
+    let guardian = Arc::new(Mutex::new(Guardian::new(guardian_config)));
+
+    // ✅ 1. TẠO rex TRƯỚC
     let rex = lua.create_table()?;
 
+    // ✅ 2. RỒI MỚI set guardian vào rex
+    let guardian_module = create_guardian_module(lua, guardian.clone())?;
+    rex.set("guardian", guardian_module)?;
     // ========================================
     // EAGER LOAD: Always needed, load immediately
     // ========================================
@@ -801,4 +816,112 @@ fn lua_value_to_json_with_depth(
             "Unsupported Lua type".to_string(),
         )),
     }
+}
+/// Create rex.guardian module
+fn create_guardian_module(lua: &Lua, guardian: Arc<Mutex<Guardian>>) -> LuaResult<Table<'_>> {
+    let guardian_table = lua.create_table()?;
+
+    // rex.guardian.check_network(url)
+    guardian_table.set(
+        "check_network",
+        lua.create_function({
+            let guardian = guardian.clone();
+            move |_, url: String| {
+                let g = guardian.lock().unwrap();
+                match g.check_network(&url) {
+                    Ok(true) => Ok(true),
+                    Ok(false) => Ok(false),
+                    Err(e) => Err(mlua::Error::RuntimeError(e)),
+                }
+            }
+        })?,
+    )?;
+
+    // rex.guardian.allow_domain(domain)
+    guardian_table.set(
+        "allow_domain",
+        lua.create_function({
+            let guardian = guardian.clone();
+            move |_, domain: String| {
+                let g = guardian.lock().unwrap();
+                g.network()
+                    .add_to_whitelist(&domain)
+                    .map_err(|e| mlua::Error::RuntimeError(e))?;
+                Ok(true)
+            }
+        })?,
+    )?;
+
+    // rex.guardian.block_domain(domain)
+    guardian_table.set(
+        "block_domain",
+        lua.create_function({
+            let guardian = guardian.clone();
+            move |_, domain: String| {
+                let g = guardian.lock().unwrap();
+                g.network()
+                    .add_to_blacklist(&domain)
+                    .map_err(|e| mlua::Error::RuntimeError(e))?;
+                Ok(true)
+            }
+        })?,
+    )?;
+
+    // rex.guardian.stats()
+    guardian_table.set(
+        "stats",
+        lua.create_function({
+            let guardian = guardian.clone();
+            move |lua, ()| {
+                let g = guardian.lock().unwrap();
+                let stats = g.get_stats();
+                let table = lua.create_table()?;
+                table.set("total_requests", stats.total_requests)?;
+                table.set("allowed_requests", stats.allowed_requests)?;
+                table.set("blocked_requests", stats.blocked_requests)?;
+                Ok(table)
+            }
+        })?,
+    )?;
+
+    // rex.guardian.show_stats()
+    guardian_table.set(
+        "show_stats",
+        lua.create_function({
+            let guardian = guardian.clone();
+            move |_, ()| {
+                let g = guardian.lock().unwrap();
+                g.show_stats();
+                Ok(())
+            }
+        })?,
+    )?;
+
+    // rex.guardian.enable_interactive()
+    guardian_table.set(
+        "enable_interactive",
+        lua.create_function({
+            let guardian = guardian.clone();
+            move |_, ()| {
+                let mut g = guardian.lock().unwrap();
+                g.enable_interactive();
+                Ok(())
+            }
+        })?,
+    )?;
+
+    // rex.guardian.disable_interactive()
+    guardian_table.set(
+        "disable_interactive",
+        lua.create_function({
+            let guardian = guardian.clone();
+            move |_, ()| {
+                let mut g = guardian.lock().unwrap();
+                g.disable_interactive();
+                Ok(())
+            }
+        })?,
+    )?;
+
+    Ok(guardian_table)
 }
