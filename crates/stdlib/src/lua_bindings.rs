@@ -2,11 +2,14 @@
 
 use mlua::{Lua, Result as LuaResult, Table, Value, Variadic};
 use serde_json;
-use std::sync::{Arc, Mutex}; // ✅ THÊM DÒNG NÀY
+use std::sync::{Arc, Mutex};
 use tracing::info;
 
 use crate::error::StdlibError;
+use crate::guardian::database::DatabaseConfig;
+use crate::guardian::filesystem::FileSystemConfig;
 use crate::guardian::network::NetworkConfig;
+use crate::guardian::secrets::SecretConfig;
 use crate::guardian::{Guardian, GuardianConfig};
 use crate::store::{create_cache_module, create_db_module, CacheStore, Database};
 
@@ -20,9 +23,12 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
     let database = Database::open("rustisaur.db")
         .map_err(|e| StdlibError::Runtime(format!("Failed to open database: {}", e)))?;
 
-    // Khởi tạo Guardian - Multi-layer Security
+    // Khởi tạo Guardian - Multi-layer Security (Phase 1 + Phase 2)
     let guardian_config = GuardianConfig {
         network: NetworkConfig::default(),
+        database: DatabaseConfig::default(),
+        filesystem: FileSystemConfig::default(),
+        secrets: SecretConfig::default(),
         interactive_mode: true,
         log_all_requests: true,
     };
@@ -34,6 +40,7 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
     // ✅ 2. RỒI MỚI set guardian vào rex
     let guardian_module = create_guardian_module(lua, guardian.clone())?;
     rex.set("guardian", guardian_module)?;
+
     // ========================================
     // EAGER LOAD: Always needed, load immediately
     // ========================================
@@ -817,9 +824,14 @@ fn lua_value_to_json_with_depth(
         )),
     }
 }
-/// Create rex.guardian module
+
+/// Create rex.guardian module (Phase 1 + Phase 2)
 fn create_guardian_module(lua: &Lua, guardian: Arc<Mutex<Guardian>>) -> LuaResult<Table<'_>> {
     let guardian_table = lua.create_table()?;
+
+    // ========================================
+    // PHASE 1: NETWORK FIREWALL
+    // ========================================
 
     // rex.guardian.check_network(url)
     guardian_table.set(
@@ -846,7 +858,7 @@ fn create_guardian_module(lua: &Lua, guardian: Arc<Mutex<Guardian>>) -> LuaResul
                 let g = guardian.lock().unwrap();
                 g.network()
                     .add_to_whitelist(&domain)
-                    .map_err(|e| mlua::Error::RuntimeError(e))?;
+                    .map_err(mlua::Error::RuntimeError)?;
                 Ok(true)
             }
         })?,
@@ -861,11 +873,178 @@ fn create_guardian_module(lua: &Lua, guardian: Arc<Mutex<Guardian>>) -> LuaResul
                 let g = guardian.lock().unwrap();
                 g.network()
                     .add_to_blacklist(&domain)
-                    .map_err(|e| mlua::Error::RuntimeError(e))?;
+                    .map_err(mlua::Error::RuntimeError)?;
                 Ok(true)
             }
         })?,
     )?;
+
+    // ========================================
+    // PHASE 2: DATABASE FIREWALL
+    // ========================================
+
+    // rex.guardian.check_database(sql)
+    guardian_table.set(
+        "check_database",
+        lua.create_function({
+            let guardian = guardian.clone();
+            move |_, sql: String| {
+                let g = guardian.lock().unwrap();
+                match g.check_database(&sql) {
+                    Ok(true) => Ok(true),
+                    Ok(false) => Ok(false),
+                    Err(e) => Err(mlua::Error::RuntimeError(e)),
+                }
+            }
+        })?,
+    )?;
+
+    // rex.guardian.add_blocked_keyword(keyword)
+    guardian_table.set(
+        "add_blocked_keyword",
+        lua.create_function({
+            let guardian = guardian.clone();
+            move |_, keyword: String| {
+                let g = guardian.lock().unwrap();
+                g.database().add_blocked_keyword(&keyword);
+                Ok(true)
+            }
+        })?,
+    )?;
+
+    // rex.guardian.remove_blocked_keyword(keyword)
+    guardian_table.set(
+        "remove_blocked_keyword",
+        lua.create_function({
+            let guardian = guardian.clone();
+            move |_, keyword: String| {
+                let g = guardian.lock().unwrap();
+                g.database().remove_blocked_keyword(&keyword);
+                Ok(true)
+            }
+        })?,
+    )?;
+
+    // ========================================
+    // PHASE 2: FILE SYSTEM FIREWALL
+    // ========================================
+
+    // rex.guardian.check_file(path, operation)
+    guardian_table.set(
+        "check_file",
+        lua.create_function({
+            let guardian = guardian.clone();
+            move |_, (path, operation): (String, String)| {
+                let g = guardian.lock().unwrap();
+                let op_type = match operation.to_lowercase().as_str() {
+                    "read" => crate::guardian::filesystem::FileOpType::Read,
+                    "write" => crate::guardian::filesystem::FileOpType::Write,
+                    "delete" => crate::guardian::filesystem::FileOpType::Delete,
+                    "create" => crate::guardian::filesystem::FileOpType::Create,
+                    "rename" => crate::guardian::filesystem::FileOpType::Rename,
+                    "copy" => crate::guardian::filesystem::FileOpType::Copy,
+                    _ => {
+                        return Err(mlua::Error::RuntimeError(format!(
+                            "Unknown file operation: {}",
+                            operation
+                        )))
+                    }
+                };
+                match g.check_filesystem(&path, op_type) {
+                    Ok(true) => Ok(true),
+                    Ok(false) => Ok(false),
+                    Err(e) => Err(mlua::Error::RuntimeError(e)),
+                }
+            }
+        })?,
+    )?;
+
+    // rex.guardian.allow_path(path)
+    guardian_table.set(
+        "allow_path",
+        lua.create_function({
+            let guardian = guardian.clone();
+            move |_, path: String| {
+                let g = guardian.lock().unwrap();
+                g.filesystem().add_allowed_path(&path);
+                Ok(true)
+            }
+        })?,
+    )?;
+
+    // rex.guardian.block_pattern(pattern)
+    guardian_table.set(
+        "block_pattern",
+        lua.create_function({
+            let guardian = guardian.clone();
+            move |_, pattern: String| {
+                let g = guardian.lock().unwrap();
+                g.filesystem().add_blocked_pattern(&pattern);
+                Ok(true)
+            }
+        })?,
+    )?;
+
+    // ========================================
+    // PHASE 2: SECRET PROTECTION
+    // ========================================
+
+    // rex.guardian.check_secret(variable_name, access_type)
+    guardian_table.set(
+        "check_secret",
+        lua.create_function({
+            let guardian = guardian.clone();
+            move |_, (variable_name, access_type): (String, String)| {
+                let g = guardian.lock().unwrap();
+                let access = match access_type.to_lowercase().as_str() {
+                    "read" => crate::guardian::secrets::SecretAccessType::Read,
+                    "write" => crate::guardian::secrets::SecretAccessType::Write,
+                    "print" => crate::guardian::secrets::SecretAccessType::Print,
+                    "export" => crate::guardian::secrets::SecretAccessType::Export,
+                    _ => {
+                        return Err(mlua::Error::RuntimeError(format!(
+                            "Unknown access type: {}",
+                            access_type
+                        )))
+                    }
+                };
+                match g.check_secret(&variable_name, access) {
+                    Ok(true) => Ok(true),
+                    Ok(false) => Ok(false),
+                    Err(e) => Err(mlua::Error::RuntimeError(e)),
+                }
+            }
+        })?,
+    )?;
+
+    // rex.guardian.mask_secret(value)
+    guardian_table.set(
+        "mask_secret",
+        lua.create_function({
+            let guardian = guardian.clone();
+            move |_, value: String| {
+                let g = guardian.lock().unwrap();
+                Ok(g.secrets().mask_value(&value))
+            }
+        })?,
+    )?;
+
+    // rex.guardian.add_protected_pattern(pattern)
+    guardian_table.set(
+        "add_protected_pattern",
+        lua.create_function({
+            let guardian = guardian.clone();
+            move |_, pattern: String| {
+                let g = guardian.lock().unwrap();
+                g.secrets().add_protected_pattern(&pattern);
+                Ok(true)
+            }
+        })?,
+    )?;
+
+    // ========================================
+    // STATISTICS & CONTROL
+    // ========================================
 
     // rex.guardian.stats()
     guardian_table.set(

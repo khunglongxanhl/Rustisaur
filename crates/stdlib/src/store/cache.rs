@@ -312,12 +312,7 @@ impl CacheStore {
     /// Get nhiều keys cùng lúc
     pub fn batch_get(&self, keys: &[String]) -> Vec<Option<CachedValue>> {
         debug!("📦 Cache BATCH GET: {} keys", keys.len());
-        keys.iter()
-            .map(|key| {
-                let result = self.get(key);
-                result
-            })
-            .collect()
+        keys.iter().map(|key| self.get(key)).collect()
     }
 
     /// Xóa nhiều keys cùng lúc
