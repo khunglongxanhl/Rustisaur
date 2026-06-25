@@ -5,11 +5,14 @@
 //! - ⏰ TTL (Time To Live): Tự động xóa sau X giây
 //! - 🧵 Thread-safe: Hoạt động tốt với async/multi-thread
 //! - 📦 Hỗ trợ mọi kiểu dữ liệu Lua (string, number, table, boolean)
+//! - 📊 Debugging: Thống kê hits/misses, operations count
 
 use dashmap::DashMap;
 use mlua::{Lua, Result as LuaResult, Table, Value};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tracing::debug;
 
 /// Một entry trong cache, bao gồm value và thời gian hết hạn
 #[derive(Clone)]
@@ -69,10 +72,53 @@ impl CachedValue {
     }
 }
 
+/// Thống kê cache (cho debugging)
+#[derive(Default)]
+pub struct CacheStats {
+    pub hits: AtomicU64,
+    pub misses: AtomicU64,
+    pub sets: AtomicU64,
+    pub deletes: AtomicU64,
+    pub evictions: AtomicU64,
+}
+
+impl CacheStats {
+    pub fn record_hit(&self) {
+        self.hits.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn record_miss(&self) {
+        self.misses.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn record_set(&self) {
+        self.sets.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn record_delete(&self) {
+        self.deletes.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn record_eviction(&self) {
+        self.evictions.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn hit_rate(&self) -> f64 {
+        let hits = self.hits.load(Ordering::Relaxed) as f64;
+        let total = hits + self.misses.load(Ordering::Relaxed) as f64;
+        if total == 0.0 {
+            0.0
+        } else {
+            hits / total * 100.0
+        }
+    }
+}
+
 /// Cache store - Trái tim của "tốc độ phản lực"
 #[derive(Clone)]
 pub struct CacheStore {
     inner: Arc<DashMap<String, CacheEntry>>,
+    stats: Arc<CacheStats>,
 }
 
 impl Default for CacheStore {
@@ -83,15 +129,28 @@ impl Default for CacheStore {
 
 impl CacheStore {
     pub fn new() -> Self {
+        debug!("🔥 Initializing CacheStore (Redis-like)");
         Self {
             inner: Arc::new(DashMap::new()),
+            stats: Arc::new(CacheStats::default()),
+        }
+    }
+
+    /// Tạo cache với pre-allocated capacity (tối ưu cho batch operations)
+    pub fn with_capacity(capacity: usize) -> Self {
+        debug!("🔥 Initializing CacheStore with capacity: {}", capacity);
+        Self {
+            inner: Arc::new(DashMap::with_capacity(capacity)),
+            stats: Arc::new(CacheStats::default()),
         }
     }
 
     /// Set value với TTL (time to live) tính bằng giây
     pub fn set(&self, key: String, value: CachedValue, ttl_seconds: Option<u64>) {
+        debug!(key = %key, ttl = ?ttl_seconds, "📝 Cache SET");
         let expires_at = ttl_seconds.map(|secs| Instant::now() + Duration::from_secs(secs));
         self.inner.insert(key, CacheEntry { value, expires_at });
+        self.stats.record_set();
     }
 
     /// Get value (trả về None nếu hết hạn hoặc không tồn tại)
@@ -103,18 +162,30 @@ impl CacheStore {
                     // Đã hết hạn, xóa và trả về None
                     drop(entry);
                     self.inner.remove(key);
+                    self.stats.record_eviction();
+                    debug!(key = %key, "⏰ Cache TTL expired");
+                    self.stats.record_miss();
                     return None;
                 }
             }
+            debug!(key = %key, "✅ Cache HIT");
+            self.stats.record_hit();
             Some(entry.value.clone())
         } else {
+            debug!(key = %key, "❌ Cache MISS");
+            self.stats.record_miss();
             None
         }
     }
 
     /// Xóa một key
     pub fn delete(&self, key: &str) -> bool {
-        self.inner.remove(key).is_some()
+        debug!(key = %key, "🗑️  Cache DELETE");
+        let removed = self.inner.remove(key).is_some();
+        if removed {
+            self.stats.record_delete();
+        }
+        removed
     }
 
     /// Kiểm tra key có tồn tại không
@@ -124,6 +195,7 @@ impl CacheStore {
                 if Instant::now() > expires_at {
                     drop(entry);
                     self.inner.remove(key);
+                    self.stats.record_eviction();
                     return false;
                 }
             }
@@ -135,6 +207,7 @@ impl CacheStore {
 
     /// Xóa TẤT CẢ (như Redis FLUSHALL)
     pub fn clear(&self) {
+        debug!("🧹 Cache CLEAR - removing all entries");
         self.inner.clear();
     }
 
@@ -142,6 +215,7 @@ impl CacheStore {
     pub fn len(&self) -> usize {
         self.inner.len()
     }
+
     /// Kiểm tra cache có rỗng không
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
@@ -153,7 +227,7 @@ impl CacheStore {
     }
 
     /// Dọn dẹp các keys đã hết hạn (nên gọi định kỳ)
-    pub fn cleanup_expired(&self) {
+    pub fn cleanup_expired(&self) -> usize {
         let now = Instant::now();
         let expired_keys: Vec<String> = self
             .inner
@@ -168,36 +242,107 @@ impl CacheStore {
             })
             .collect();
 
+        let count = expired_keys.len();
         for key in expired_keys {
             self.inner.remove(&key);
+            self.stats.record_eviction();
         }
+
+        if count > 0 {
+            debug!("🧹 Cleaned up {} expired cache entries", count);
+        }
+        count
     }
 
     /// Increment một số (giống Redis INCR)
     pub fn incr(&self, key: &str, delta: f64) -> LuaResult<f64> {
-        let new_value = if let Some(entry) = self.inner.get(key) {
-            match &entry.value {
-                CachedValue::Number(n) => n + delta,
-                CachedValue::Nil => delta,
+        // TỐI ƯU: Dùng entry() API để tránh double lookup
+        use dashmap::mapref::entry::Entry;
+
+        let new_value = match self.inner.entry(key.to_string()) {
+            Entry::Occupied(mut entry) => match &entry.get().value {
+                CachedValue::Number(n) => {
+                    let new_val = n + delta;
+                    entry.get_mut().value = CachedValue::Number(new_val);
+                    new_val
+                }
+                CachedValue::Nil => {
+                    entry.get_mut().value = CachedValue::Number(delta);
+                    delta
+                }
                 _ => {
                     return Err(mlua::Error::RuntimeError(
                         "Value is not a number".to_string(),
-                    ))
+                    ));
                 }
+            },
+            Entry::Vacant(entry) => {
+                entry.insert(CacheEntry {
+                    value: CachedValue::Number(delta),
+                    expires_at: None,
+                });
+                delta
             }
-        } else {
-            delta
         };
 
-        self.inner.insert(
-            key.to_string(),
-            CacheEntry {
-                value: CachedValue::Number(new_value),
-                expires_at: None,
-            },
-        );
-
+        debug!(key = %key, delta = delta, new_value = new_value, "🔢 Cache INCR");
         Ok(new_value)
+    }
+
+    // ==========================================
+    // BATCH OPERATIONS (Tối ưu FFI overhead)
+    // ==========================================
+
+    /// Set nhiều keys cùng lúc (Nhanh hơn gọi set() nhiều lần)
+    pub fn batch_set(&self, entries: Vec<(String, CachedValue, Option<u64>)>) {
+        let count = entries.len(); // ✅ Lưu length TRƯỚC
+        debug!("📦 Cache BATCH SET: {} entries", count);
+
+        for (key, value, ttl) in entries {
+            let expires_at = ttl.map(|secs| Instant::now() + Duration::from_secs(secs));
+            self.inner.insert(key, CacheEntry { value, expires_at });
+        }
+
+        for _ in 0..count {
+            // ✅ Dùng biến count đã lưu
+            self.stats.record_set();
+        }
+    }
+
+    /// Get nhiều keys cùng lúc
+    pub fn batch_get(&self, keys: &[String]) -> Vec<Option<CachedValue>> {
+        debug!("📦 Cache BATCH GET: {} keys", keys.len());
+        keys.iter()
+            .map(|key| {
+                let result = self.get(key);
+                result
+            })
+            .collect()
+    }
+
+    /// Xóa nhiều keys cùng lúc
+    pub fn batch_delete(&self, keys: &[String]) -> usize {
+        debug!("📦 Cache BATCH DELETE: {} keys", keys.len());
+        let mut count = 0;
+        for key in keys {
+            if self.inner.remove(key).is_some() {
+                count += 1;
+                self.stats.record_delete();
+            }
+        }
+        count
+    }
+
+    /// Lấy thống kê cache (cho debugging)
+    pub fn get_stats(&self) -> (u64, u64, u64, u64, u64, f64) {
+        (
+            self.stats.hits.load(Ordering::Relaxed),
+            self.stats.misses.load(Ordering::Relaxed),
+            self.stats.sets.load(Ordering::Relaxed),
+            self.stats.deletes.load(Ordering::Relaxed),
+            self.stats.evictions.load(Ordering::Relaxed),
+            self.stats.hit_rate(),
+        )
     }
 }
 
@@ -269,6 +414,15 @@ pub fn create_cache_module(lua: &Lua, cache: CacheStore) -> LuaResult<Table<'_>>
         })?,
     )?;
 
+    // rex.store.cache.is_empty()
+    cache_table.set(
+        "is_empty",
+        lua.create_function({
+            let cache = cache.clone();
+            move |_, ()| Ok(cache.is_empty())
+        })?,
+    )?;
+
     // rex.store.cache.keys()
     cache_table.set(
         "keys",
@@ -299,9 +453,93 @@ pub fn create_cache_module(lua: &Lua, cache: CacheStore) -> LuaResult<Table<'_>>
         "cleanup",
         lua.create_function({
             let cache = cache.clone();
-            move |_, ()| {
-                cache.cleanup_expired();
+            move |_, ()| Ok(cache.cleanup_expired())
+        })?,
+    )?;
+
+    // ==========================================
+    // BATCH OPERATIONS (Tối ưu FFI overhead)
+    // ==========================================
+
+    // rex.store.cache.batch_set(entries) - entries là array of {key, value, ttl?}
+    cache_table.set(
+        "batch_set",
+        lua.create_function({
+            let cache = cache.clone();
+            move |_, entries: Table| {
+                let mut batch = Vec::with_capacity(entries.len().unwrap_or(0) as usize);
+                for pair in entries.pairs::<i64, Table>() {
+                    let (_, item) = pair?;
+                    let key: String = item.get("key")?;
+                    let value: Value = item.get("value")?;
+                    let ttl: Option<u64> = item.get("ttl").ok();
+
+                    let cached_value = CachedValue::from_lua(value)?;
+                    batch.push((key, cached_value, ttl));
+                }
+                cache.batch_set(batch);
                 Ok(true)
+            }
+        })?,
+    )?;
+
+    // rex.store.cache.batch_get(keys) - keys là array of string
+    cache_table.set(
+        "batch_get",
+        lua.create_function({
+            let cache = cache.clone();
+            move |lua, keys: Table| {
+                let mut key_list = Vec::with_capacity(keys.len().unwrap_or(0) as usize);
+                for pair in keys.pairs::<i64, String>() {
+                    let (_, key) = pair?;
+                    key_list.push(key);
+                }
+
+                let results = cache.batch_get(&key_list);
+                let result_table = lua.create_table()?;
+                for (i, val) in results.into_iter().enumerate() {
+                    match val {
+                        Some(v) => result_table.set(i + 1, v.to_lua(lua)?)?,
+                        None => result_table.set(i + 1, Value::Nil)?,
+                    }
+                }
+                Ok(result_table)
+            }
+        })?,
+    )?;
+
+    // rex.store.cache.batch_delete(keys) - keys là array of string
+    cache_table.set(
+        "batch_delete",
+        lua.create_function({
+            let cache = cache.clone();
+            move |_, keys: Table| {
+                let mut key_list = Vec::with_capacity(keys.len().unwrap_or(0) as usize);
+                for pair in keys.pairs::<i64, String>() {
+                    let (_, key) = pair?;
+                    key_list.push(key);
+                }
+                Ok(cache.batch_delete(&key_list))
+            }
+        })?,
+    )?;
+
+    // rex.store.cache.stats() - Lấy thống kê cache (cho debugging)
+    cache_table.set(
+        "stats",
+        lua.create_function({
+            let cache = cache.clone();
+            move |lua, ()| {
+                let (hits, misses, sets, deletes, evictions, hit_rate) = cache.get_stats();
+                let stats = lua.create_table()?;
+                stats.set("hits", hits)?;
+                stats.set("misses", misses)?;
+                stats.set("sets", sets)?;
+                stats.set("deletes", deletes)?;
+                stats.set("evictions", evictions)?;
+                stats.set("hit_rate", hit_rate)?;
+                stats.set("size", cache.len())?;
+                Ok(stats)
             }
         })?,
     )?;

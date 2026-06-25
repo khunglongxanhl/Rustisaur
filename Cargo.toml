@@ -22,6 +22,9 @@ homepage = "https://rustisaur.dev"
 documentation = "https://docs.rs/rustisaur"
 
 [workspace.dependencies]
+# ==========================================
+# EXTERNAL DEPENDENCIES
+# ==========================================
 tokio = { version = "1.35", features = ["full"] }
 mlua = { version = "0.9", features = ["lua54", "vendored", "async", "send"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -42,11 +45,25 @@ libloading = "0.8"
 chrono = { version = "0.4", features = ["serde"] }
 rand = "0.8"
 lru = "0.12"
+dashmap = "5.5"
+rusqlite = { version = "0.31", features = ["bundled"] }
 
-# Internal crates
+# ==========================================
+# INTERNAL CRATES (ĐẶT VÀO ĐÂY!)
+# ==========================================
 rustisaur-core = { path = "crates/core" }
 rustisaur-lua-bridge = { path = "crates/lua-bridge" }
 rustisaur-stdlib = { path = "crates/stdlib" }
 rustisaur-event-system = { path = "crates/event-system" }
 rustisaur-plugin-system = { path = "crates/plugin-system" }
 rustisaur-ffi-layer = { path = "crates/ffi-layer" }
+
+# ==========================================
+# RELEASE PROFILE
+# ==========================================
+[profile.release]
+opt-level = 3           # Tối ưu tốc độ tối đa
+lto = true              # Link Time Optimization
+codegen-units = 1       # Giúp LTO hoạt động hiệu quả hơn
+strip = true            # Xóa debug symbols
+panic = "abort"         # Giảm size code xử lý lỗi

@@ -136,7 +136,7 @@ fn create_table_module(lua: &Lua) -> LuaResult<Table<'_>> {
 
     table.set(
         "length",
-        lua.create_function(|_, t: Table| Ok(t.len().unwrap_or(0)))?,
+        lua.create_function(|_, t: Table| Ok(t.len().unwrap_or(0) as usize))?,
     )?;
 
     table.set(
