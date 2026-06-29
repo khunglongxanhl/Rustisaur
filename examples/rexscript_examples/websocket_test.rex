@@ -90,4 +90,9 @@ rex.print("State: " .. rex.websocket.get_state(ws))
 rex.print("Is connected: " .. tostring(rex.websocket.is_connected(ws)))
 
 -- Test 6: Close connection
-rex.print("\n📡 Test 6: Close
+rex.print("\n📡 Test 6: Close connection")
+rex.websocket.close(ws)
+rex.os.sleep(200)
+rex.print("State after close: " .. rex.websocket.get_state(ws))
+
+rex.print("\n✅ WebSocket test complete!")

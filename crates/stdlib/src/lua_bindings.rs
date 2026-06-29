@@ -11,7 +11,9 @@ use crate::guardian::filesystem::FileSystemConfig;
 use crate::guardian::network::NetworkConfig;
 use crate::guardian::secrets::SecretConfig;
 use crate::guardian::{Guardian, GuardianConfig};
+use crate::http::{create_http_module, HttpClient};
 use crate::store::{create_cache_module, create_db_module, CacheStore, Database};
+use crate::websocket::create_websocket_module;
 
 /// Register all standard library functions into the Lua state.
 /// Uses lazy loading: modules are only created when first accessed.
@@ -81,6 +83,17 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
     store.set("db", db_module)?;
 
     rex.set("store", store)?;
+    // ========================================
+    // rex.http - HTTP Client (Sync)
+    // ========================================
+    let http_client = HttpClient::new();
+    let http_module = create_http_module(lua, http_client)?;
+    rex.set("http", http_module)?;
+    // ========================================
+    // rex.websocket - WebSocket Client
+    // ========================================
+    let websocket_module = create_websocket_module(lua)?;
+    rex.set("websocket", websocket_module)?;
 
     // ========================================
     // LAZY LOAD: Only created when first accessed
