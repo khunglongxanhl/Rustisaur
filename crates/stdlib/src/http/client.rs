@@ -183,11 +183,9 @@ impl HttpClient {
     /// Check if headers contain Content-Type
     fn has_content_type(headers: &Table) -> bool {
         let headers_clone = headers.clone();
-        for pair in headers_clone.pairs::<String, String>() {
-            if let Ok((key, _)) = pair {
-                if key.to_lowercase() == "content-type" {
-                    return true;
-                }
+        for (key, _) in headers_clone.pairs::<String, String>().flatten() {
+            if key.to_lowercase() == "content-type" {
+                return true;
             }
         }
         false
@@ -215,7 +213,7 @@ pub fn create_http_module(lua: &Lua, client: HttpClient) -> LuaResult<Table<'_>>
                 let result = lua.create_table()?;
                 result.set("status", status)?;
                 result.set("body", body.clone())?;
-                result.set("ok", status >= 200 && status < 300)?;
+                result.set("ok", (200..300).contains(&status))?;
 
                 // Try to parse as JSON
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&body) {
@@ -239,7 +237,7 @@ pub fn create_http_module(lua: &Lua, client: HttpClient) -> LuaResult<Table<'_>>
                 let result = lua.create_table()?;
                 result.set("status", status)?;
                 result.set("body", response_body.clone())?;
-                result.set("ok", status >= 200 && status < 300)?;
+                result.set("ok", (200..300).contains(&status))?;
 
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&response_body) {
                     let json_value = json_value_to_lua(lua, &parsed)?;
@@ -262,7 +260,7 @@ pub fn create_http_module(lua: &Lua, client: HttpClient) -> LuaResult<Table<'_>>
                 let result = lua.create_table()?;
                 result.set("status", status)?;
                 result.set("body", response_body.clone())?;
-                result.set("ok", status >= 200 && status < 300)?;
+                result.set("ok", (200..300).contains(&status))?;
 
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&response_body) {
                     let json_value = json_value_to_lua(lua, &parsed)?;
@@ -285,7 +283,7 @@ pub fn create_http_module(lua: &Lua, client: HttpClient) -> LuaResult<Table<'_>>
                 let result = lua.create_table()?;
                 result.set("status", status)?;
                 result.set("body", response_body.clone())?;
-                result.set("ok", status >= 200 && status < 300)?;
+                result.set("ok", (200..300).contains(&status))?;
 
                 if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&response_body) {
                     let json_value = json_value_to_lua(lua, &parsed)?;
