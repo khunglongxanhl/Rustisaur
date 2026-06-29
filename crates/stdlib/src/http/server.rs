@@ -110,9 +110,7 @@ impl HttpServer {
         let handler_key = lua.create_registry_value(handler)?;
 
         let mut routes = self.routes.lock().unwrap();
-        let method_routes = routes
-            .entry(method.to_uppercase())
-            .or_insert_with(HashMap::new);
+        let method_routes = routes.entry(method.to_uppercase()).or_default();
         method_routes.insert(path.to_string(), RouteInfo { handler_key });
 
         info!("📍 {} {}", method.to_uppercase(), path);
