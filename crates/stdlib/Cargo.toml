@@ -27,6 +27,8 @@ tracing = { workspace = true }
 crossterm = { workspace = true }
 dialoguer = { workspace = true }
 reqwest = { workspace = true, features = ["blocking", "json"] }
+tiny_http = { workspace = true }
+urlencoding = { workspace = true }
 
 # 1. SQLite cho "Hard Tasks" (Lưu trữ bền vững, Query phức tạp)
 # Tính năng "bundled" giúp tự động biên dịch SQLite vào file .exe, người dùng không cần cài đặt gì thêm!

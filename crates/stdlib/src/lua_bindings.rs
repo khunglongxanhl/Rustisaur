@@ -11,7 +11,7 @@ use crate::guardian::filesystem::FileSystemConfig;
 use crate::guardian::network::NetworkConfig;
 use crate::guardian::secrets::SecretConfig;
 use crate::guardian::{Guardian, GuardianConfig};
-use crate::http::{create_http_module, HttpClient};
+use crate::http::{create_http_module, create_http_server_module, HttpClient};
 use crate::store::{create_cache_module, create_db_module, CacheStore, Database};
 use crate::websocket::create_websocket_module;
 
@@ -88,6 +88,11 @@ pub fn register_all(lua: &Lua) -> Result<(), StdlibError> {
     // ========================================
     let http_client = HttpClient::new();
     let http_module = create_http_module(lua, http_client)?;
+
+    // Thêm HTTP Server vào cùng module
+    let http_server_module = create_http_server_module(lua)?;
+    http_module.set("server", http_server_module)?;
+
     rex.set("http", http_module)?;
     // ========================================
     // rex.websocket - WebSocket Client
